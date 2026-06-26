@@ -15,21 +15,19 @@ const conversations = {};
 
 async function sendSMS(to, message) {
   const params = { number: to, message: message };
-  const sortedParams = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&');
-  const sign = crypto.createHmac('md5', ZADARMA_SECRET).update('/v1/sms/send/' + sortedParams).digest('hex');
-  const encoded = Buffer.from(`${ZADARMA_KEY}:${sign}`).toString('base64');
+  const keys = Object.keys(params).sort();
+  const sortedStr = keys.map(function(k) { return k + '=' + params[k]; }).join('&');
+  const sign = crypto.createHmac('md5', ZADARMA_SECRET).update('/v1/sms/send/' + sortedStr).digest('hex');
+  const encoded = Buffer.from(ZADARMA_KEY + ':' + sign).toString('base64');
   await axios.post('https://api.zadarma.com/v1/sms/send/', params, {
-    headers: { Authorization: `Basic ${encoded}` }
+    headers: { Authorization: 'Basic ' + encoded }
   });
 }
 
 async function askGPT(phone, userMessage) {
   if (!conversations[phone]) {
     conversations[phone] = [
-      { role: 'system', content: `Tu es un assistant virtuel professionnel pour une entreprise locale. 
-Tu réponds aux SMS des clients de façon courte, polie et utile. 
-Tu peux prendre des rendez-vous, répondre aux questions courantes. 
-Si le client veut un RDV, demande-lui sa disponibilité (jour et heure).` }
+      { role: 'system', content: 'Tu es un assistant virtuel professionnel pour une entreprise locale. Tu reponds aux SMS des clients de facon courte, polie et utile. Tu peux prendre des rendez-vous et repondre aux questions courantes.' }
     ];
   }
   conversations[phone].push({ role: 'user', content: userMessage });
@@ -38,7 +36,7 @@ Si le client veut un RDV, demande-lui sa disponibilité (jour et heure).` }
     messages: conversations[phone],
     max_tokens: 150
   }, {
-    headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }
+    headers: { Authorization: 'Bearer ' + OPENAI_API_KEY }
   });
   const reply = response.data.choices[0].message.content;
   conversations[phone].push({ role: 'assistant', content: reply });
@@ -46,7 +44,7 @@ Si le client veut un RDV, demande-lui sa disponibilité (jour et heure).` }
 }
 
 app.all('/', async (req, res) => {
-  const data = { ...req.query, ...req.body };
+  const data = Object.assign({}, req.query, req.body);
   console.log('Recu:', data.event, data.disposition);
 
   if (data.zd_echo) return res.send(data.zd_echo);
@@ -54,7 +52,7 @@ app.all('/', async (req, res) => {
   if (data.event === 'NOTIFY_END' && data.disposition === 'cancel') {
     try {
       await axios.post(MAKE_URL, data);
-      console.log('SMS missed call declenche !');
+      console.log('SMS appel manque declenche !');
     } catch(e) {
       console.log('Erreur Make:', e.message);
     }
@@ -64,9 +62,9 @@ app.all('/', async (req, res) => {
     try {
       const phone = data.caller_id;
       const message = data.msg;
-      console.log(`SMS entrant de ${phone}: ${message}`);
+      console.log('SMS entrant de ' + phone + ': ' + message);
       const reply = await askGPT(phone, message);
-      console.log(`Reponse GPT: ${reply}`);
+      console.log('Reponse GPT: ' + reply);
       await sendSMS(phone, reply);
       console.log('SMS reponse envoye !');
     } catch(e) {
@@ -78,4 +76,4 @@ app.all('/', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Serveur demarre sur port ' + PORT));s
+app.listen(PORT, function() { console.log('Serveur demarre sur port ' + PORT); });
