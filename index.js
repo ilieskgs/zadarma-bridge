@@ -58,7 +58,7 @@ app.all('/', async (req, res) => {
     }
   }
 
-  if (data.event === 'NOTIFY_SMS') {
+  if (data.event === 'NOTIFY_SMS' || data.event === 'SMS') {
     try {
       const phone = data.caller_id;
       const message = data.msg;
